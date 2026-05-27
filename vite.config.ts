@@ -14,6 +14,12 @@ export default defineConfig(() => {
     server: {
       hmr: process.env.DISABLE_HMR !== 'true',
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      // Allow access when served behind platforms that set a host header
+      // (e.g. Render). Add your deployment hostnames here if needed.
+      allowedHosts: [
+        'platevent.onrender.com',
+        '.onrender.com'
+      ],
     },
   };
 });
