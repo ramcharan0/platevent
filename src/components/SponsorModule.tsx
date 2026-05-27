@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { UserProfile, Event, SponsorshipAgreement, SponsorshipPackage } from "../types";
+import { UserProfile, Event, SponsorshipAgreement, SponsorshipPackage, MockMessage } from "../types";
 import { DollarSign, Eye, Compass, TrendingUp, Sparkles, Building2, Check, ExternalLink, MessageCircle } from "lucide-react";
 import { motion } from "motion/react";
 import { formatCurrencyINR } from "../utils/format";
@@ -7,19 +7,23 @@ import { formatCurrencyINR } from "../utils/format";
 interface SponsorModuleProps {
   currentUser: UserProfile;
   events: Event[];
+  messages: MockMessage[];
   sponsorAgreements: SponsorshipAgreement[];
   onSponsorApply: (eventId: string, pack: SponsorshipPackage, company: string, name: string) => void;
   onUpdateProfile: (updatedProfile: Partial<UserProfile>) => void;
+  onSendMessage: (recipientId: string, message: string) => void;
 }
 
 export default function SponsorModule({
   currentUser,
   events,
+  messages,
   sponsorAgreements,
   onSponsorApply,
   onUpdateProfile,
+  onSendMessage,
 }: SponsorModuleProps) {
-  const [activeTab, setActiveTab] = useState<"active" | "discover" | "profile">("active");
+  const [activeTab, setActiveTab] = useState<"active" | "discover" | "profile" | "messages">("active");
 
   // Profile data
   const [companyName, setCompanyName] = useState(currentUser.company || "Optima Tech Ventures");
@@ -28,8 +32,13 @@ export default function SponsorModule({
 
   // Filter for matching discover events
   const [industryFilter, setIndustryFilter] = useState("All");
+  const [sponsorMessage, setSponsorMessage] = useState("");
 
   const mySponsorships = sponsorAgreements.filter((sa) => sa.companyName.toLowerCase() === companyName.toLowerCase());
+  const sharedMessages = messages.filter((message) => {
+    const isMine = message.senderName === currentUser.name;
+    return isMine || message.recipientId === "all" || message.recipientId === "sponsor" || message.recipientId === currentUser.id;
+  });
 
   // Industry recommendation system logic
   const matchEventWithIndustry = (evtType: string, ind: string) => {
@@ -43,6 +52,13 @@ export default function SponsorModule({
     e.preventDefault();
     onUpdateProfile({ company: companyName, industry });
     setEditing(false);
+  };
+
+  const handleSponsorMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sponsorMessage.trim()) return;
+    onSendMessage("organizer", sponsorMessage.trim());
+    setSponsorMessage("");
   };
 
   return (
@@ -67,7 +83,8 @@ export default function SponsorModule({
         {[
           { id: "active", label: "My Sponsorships", count: mySponsorships.filter((s) => s.status === "approved").length },
           { id: "discover", label: "Discover Events", count: null },
-          { id: "profile", label: "Company Profile", count: null }
+          { id: "profile", label: "Company Profile", count: null },
+          { id: "messages", label: "Messages", count: sharedMessages.length }
         ].map((tab) => (
           <button
             key={tab.id}
@@ -278,6 +295,51 @@ export default function SponsorModule({
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* MESSAGES TAB */}
+      {activeTab === "messages" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="bg-white border border-neutral-100 rounded-xl p-6 shadow-xs lg:col-span-2 space-y-4">
+            <div>
+              <h3 className="text-xs font-bold text-neutral-800 uppercase tracking-widest">Communication Board</h3>
+              <p className="text-[10px] text-neutral-400 mt-0.5">Track organizer updates and sponsor conversations in one place.</p>
+            </div>
+
+            <div className="space-y-3 max-h-[28rem] overflow-y-auto pr-1">
+              {sharedMessages.length === 0 ? (
+                <p className="text-xs text-neutral-400 py-10 text-center">No board messages yet.</p>
+              ) : (
+                sharedMessages.map((message) => (
+                  <div key={message.id} className={`p-3 rounded-xl border text-xs ${message.senderName === currentUser.name ? "bg-amber-50 border-amber-100" : "bg-neutral-50 border-neutral-100"}`}>
+                    <div className="flex justify-between gap-3">
+                      <div>
+                        <div className="font-bold text-neutral-800">{message.senderName}</div>
+                        <div className="text-[10px] uppercase tracking-widest text-neutral-400">To: {message.recipientId}</div>
+                      </div>
+                      <span className="text-[10px] text-neutral-400">{message.timestamp}</span>
+                    </div>
+                    <p className="mt-2 text-neutral-700 leading-relaxed">{message.message}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white border border-neutral-100 rounded-xl p-6 shadow-xs space-y-4">
+            <div>
+              <h3 className="text-xs font-bold text-neutral-800 uppercase tracking-widest">Post to Organizer</h3>
+              <p className="text-[10px] text-neutral-400 mt-0.5">Send a question or status update to the event team.</p>
+            </div>
+            <form onSubmit={handleSponsorMessage} className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-semibold text-neutral-500 uppercase mb-1">Message</label>
+                <textarea value={sponsorMessage} onChange={(e) => setSponsorMessage(e.target.value)} rows={4} className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-xs" placeholder="Ask about placement, approvals, or deliverables..." />
+              </div>
+              <button type="submit" className="w-full px-4 py-2 bg-neutral-900 text-white rounded-lg text-xs font-bold cursor-pointer">Send to organizer</button>
+            </form>
           </div>
         </div>
       )}

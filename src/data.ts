@@ -300,8 +300,11 @@ export const INITIAL_TICKETS = [
     participantName: "Lalit Mehra",
     registrationDate: "2026-05-18",
     ticketCode: "TKT-INN-4890",
+    qrPayload: "eme-ticket|tkt-1|evt-1|usr-6|TKT-INN-4890",
+    qrIssuedAt: "2026-05-18T09:00:00.000Z",
     feedbackSubmitted: false,
-    certificateIssued: false
+    certificateIssued: false,
+    checkedIn: false
   },
   {
     id: "tkt-2",
@@ -313,8 +316,13 @@ export const INITIAL_TICKETS = [
     participantName: "Lalit Mehra",
     registrationDate: "2026-05-20",
     ticketCode: "TKT-AI-2091",
+    qrPayload: "eme-ticket|tkt-2|evt-2|usr-6|TKT-AI-2091",
+    qrIssuedAt: "2026-05-20T09:00:00.000Z",
     feedbackSubmitted: true,
-    certificateIssued: true
+    certificateIssued: true,
+    checkedIn: true,
+    checkedInAt: "2026-05-20T12:15:00.000Z",
+    checkedInBy: "Gate Desk"
   }
 ];
 

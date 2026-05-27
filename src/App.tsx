@@ -20,6 +20,35 @@ import AuthLandingPage from "./components/AuthLandingPage";
 import LandingPage from "./components/LandingPage";
 import { Menu, Search } from "lucide-react";
 
+const buildTicketQrPayload = (ticketId: string, eventId: string, participantId: string, ticketCode: string) =>
+  `eme-ticket|${ticketId}|${eventId}|${participantId}|${ticketCode}`;
+
+const normalizeTicket = (ticket: Partial<Ticket>): Ticket => {
+  const ticketId = ticket.id || `tkt-${Date.now()}`;
+  const eventId = ticket.eventId || "evt-unknown";
+  const participantId = ticket.participantId || "usr-unknown";
+  const ticketCode = ticket.ticketCode || `TKT-${eventId.toUpperCase().slice(0, 3)}-${ticketId.slice(-4).toUpperCase()}`;
+
+  return {
+    id: ticketId,
+    eventId,
+    eventTitle: ticket.eventTitle || "Untitled Event",
+    eventDate: ticket.eventDate || new Date().toISOString().slice(0, 10),
+    eventLocation: ticket.eventLocation || "TBD",
+    participantId,
+    participantName: ticket.participantName || "Guest Participant",
+    registrationDate: ticket.registrationDate || new Date().toISOString().slice(0, 10),
+    ticketCode,
+    qrPayload: ticket.qrPayload || buildTicketQrPayload(ticketId, eventId, participantId, ticketCode),
+    qrIssuedAt: ticket.qrIssuedAt || new Date().toISOString(),
+    feedbackSubmitted: ticket.feedbackSubmitted ?? false,
+    certificateIssued: ticket.certificateIssued ?? false,
+    checkedIn: ticket.checkedIn ?? false,
+    checkedInAt: ticket.checkedInAt,
+    checkedInBy: ticket.checkedInBy,
+  };
+};
+
 export default function App() {
   // Initialize States from localStorage if present
   const [events, setEvents] = useState<Event[]>(() => {
@@ -51,7 +80,7 @@ export default function App() {
 
   const [tickets, setTickets] = useState<Ticket[]>(() => {
     const saved = localStorage.getItem("eme_tickets");
-    return saved ? JSON.parse(saved) : INITIAL_TICKETS;
+    return saved ? (JSON.parse(saved) as Partial<Ticket>[]).map(normalizeTicket) : INITIAL_TICKETS.map((ticket) => normalizeTicket(ticket));
   });
 
   const [feedbacks, setFeedbacks] = useState<Feedback[]>(() => {
@@ -212,8 +241,11 @@ export default function App() {
     if (!matchEvent) return;
 
     // Generate Participant Ticket
+    const ticketId = `tkt-${Date.now()}`;
+    const ticketCode = `TKT-${matchEvent.type.toUpperCase().slice(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`;
+
     const newTkt: Ticket = {
-      id: `tkt-${Date.now()}`,
+      id: ticketId,
       eventId,
       eventTitle: matchEvent.title,
       eventDate: matchEvent.date,
@@ -221,12 +253,54 @@ export default function App() {
       participantId: currentUser.id,
       participantName: name,
       registrationDate: new Date().toISOString().slice(0, 10),
-      ticketCode: `TKT-${matchEvent.type.toUpperCase().slice(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`,
+      ticketCode,
+      qrPayload: buildTicketQrPayload(ticketId, eventId, currentUser.id, ticketCode),
+      qrIssuedAt: new Date().toISOString(),
       feedbackSubmitted: false,
       certificateIssued: false,
+      checkedIn: false,
     };
 
     setTickets((prev) => [newTkt, ...prev]);
+  };
+
+  const handleCheckInTicket = (scanValue: string, checkedInBy = "Gate Desk") => {
+    const normalized = scanValue.trim();
+    if (!normalized) {
+      return { ok: false, message: "Enter a ticket code or QR payload first." };
+    }
+
+    const match = tickets.find((ticket) => {
+      const haystack = [ticket.id, ticket.ticketCode, ticket.qrPayload].map((item) => item.toLowerCase());
+      return haystack.includes(normalized.toLowerCase());
+    });
+
+    if (!match) {
+      return { ok: false, message: "No matching ticket found for that QR or ticket code." };
+    }
+
+    if (match.checkedIn) {
+      return {
+        ok: false,
+        message: `Already checked in at ${match.checkedInAt ? new Date(match.checkedInAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "an earlier time"}.`,
+        ticket: match,
+      };
+    }
+
+    const checkedInAt = new Date().toISOString();
+    setTickets((prev) =>
+      prev.map((ticket) =>
+        ticket.id === match.id
+          ? { ...ticket, checkedIn: true, checkedInAt, checkedInBy }
+          : ticket
+      )
+    );
+
+    return {
+      ok: true,
+      message: `Checked in ${match.participantName} for ${match.eventTitle}.`,
+      ticket: { ...match, checkedIn: true, checkedInAt, checkedInBy },
+    };
   };
 
   // 2. Volunteer applies for a role
@@ -577,6 +651,8 @@ export default function App() {
         {activeView === "organizer" && allowedViews.includes("organizer") && (
           <OrganizerModule
             events={events}
+            tickets={tickets}
+            messages={messages}
             volunteerApps={volunteerApps}
             sponsorAgreements={sponsorAgreements}
             onAddEvent={handleAddEvent}
@@ -584,6 +660,8 @@ export default function App() {
             onRejectVolunteer={handleRejectVolunteer}
             onAssignTask={handleAssignTask}
             onMessageVolunteer={handleSendMessage}
+            onBroadcastMessage={(recipientId: string, message: string) => handleSendMessage(recipientId, message)}
+            onCheckInTicket={handleCheckInTicket}
             onReassignTask={(fromAppId: string, toAppId: string, taskId: string) => {
               setVolunteerApps((prev) => {
                 const from = prev.find((p) => p.id === fromAppId);
@@ -615,14 +693,17 @@ export default function App() {
           <SponsorModule
             currentUser={currentUser}
             events={events}
+            messages={messages}
             sponsorAgreements={sponsorAgreements}
             onSponsorApply={handleSponsorApply}
             onUpdateProfile={handleUpdateVolunteerProfile}
+            onSendMessage={handleSendMessage}
           />
         )}
 
         {activeView === "participant" && allowedViews.includes("participant") && (
           <ParticipantModule
+            currentUser={currentUser}
             tickets={tickets}
             feedbacks={feedbacks}
             messages={messages}

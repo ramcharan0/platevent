@@ -474,7 +474,7 @@ export default function EventDirectory({
                           <Check className="w-8 h-8" />
                         </div>
                         <h4 className="text-lg font-bold text-neutral-900">Ticket Reserved Successfully!</h4>
-                        <p className="text-xs text-neutral-500 mt-1">We sent an confirmation to {regEmail}. You can view the QR Ticket in the Participant dashboard tab.</p>
+                        <p className="text-xs text-neutral-500 mt-1">We sent a confirmation to {regEmail}. Your QR entry pass is now available in the Participant dashboard tab.</p>
                       </div>
                     ) : (
                       <form onSubmit={handleRegisterSubmit} className="space-y-5">

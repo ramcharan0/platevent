@@ -125,8 +125,13 @@ export interface Ticket {
   participantName: string;
   registrationDate: string;
   ticketCode: string;
+  qrPayload: string;
+  qrIssuedAt: string;
   feedbackSubmitted: boolean;
   certificateIssued: boolean;
+  checkedIn: boolean;
+  checkedInAt?: string;
+  checkedInBy?: string;
 }
 
 export interface Feedback {

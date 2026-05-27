@@ -1,11 +1,13 @@
 import React, { useState } from "react";
-import { Event, VolunteerApplication, SponsorshipAgreement, BudgetItem, EventType, UserProfile, VolunteerRole, SponsorshipPackage } from "../types";
+import { Event, VolunteerApplication, SponsorshipAgreement, BudgetItem, EventType, UserProfile, VolunteerRole, SponsorshipPackage, MockMessage } from "../types";
 import { Plus, DollarSign, Send, Award, Users, Check, X, ShieldAlert, BarChart3, Briefcase, FileText } from "lucide-react";
 import { motion } from "motion/react";
 import { formatCurrencyINR } from "../utils/format";
 
 interface OrganizerModuleProps {
   events: Event[];
+  tickets: import("../types").Ticket[];
+  messages: MockMessage[];
   volunteerApps: VolunteerApplication[];
   sponsorAgreements: SponsorshipAgreement[];
   onAddEvent: (newEvent: Event) => void;
@@ -14,6 +16,8 @@ interface OrganizerModuleProps {
   onAssignTask: (appId: string, taskName: string) => void;
   onMessageVolunteer?: (recipientId: string, message: string) => void;
   onReassignTask?: (fromAppId: string, toAppId: string, taskId: string) => void;
+  onBroadcastMessage: (recipientId: string, message: string) => void;
+  onCheckInTicket: (scanValue: string, checkedInBy?: string) => { ok: boolean; message: string; ticket?: import("../types").Ticket };
   onApproveSponsor: (agreementId: string) => void;
   onRejectSponsor: (agreementId: string) => void;
   onAddBudgetExpense: (eventId: string, expense: BudgetItem) => void;
@@ -22,6 +26,8 @@ interface OrganizerModuleProps {
 
 export default function OrganizerModule({
   events,
+  tickets,
+  messages,
   volunteerApps,
   sponsorAgreements,
   onAddEvent,
@@ -30,13 +36,15 @@ export default function OrganizerModule({
   onAssignTask,
   onMessageVolunteer,
   onReassignTask,
+  onBroadcastMessage,
+  onCheckInTicket,
   onApproveSponsor,
   onRejectSponsor,
   onAddBudgetExpense,
   onIssueCertificates,
 }: OrganizerModuleProps) {
   // Navigation
-  const [activeTab, setActiveTab] = useState<"dashboard" | "create" | "budget" | "staff" | "sponsors">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "checkin" | "create" | "budget" | "staff" | "sponsors">("dashboard");
 
   // Selected Event context for budget and certificate triggers
   const [selectedEventId, setSelectedEventId] = useState<string>(events[0]?.id || "");
@@ -64,9 +72,13 @@ export default function OrganizerModule({
   const [expCat, setExpCat] = useState<"operations" | "marketing" | "catering" | "prizes" | "venue">("operations");
 
   // Broadcast state
-  const [broadcastTarget, setBroadcastTarget] = useState<"all" | "volunteers" | "sponsors">("all");
+  const [broadcastTarget, setBroadcastTarget] = useState<"all" | "volunteers" | "sponsors" | "participants">("all");
   const [broadcastMessage, setBroadcastMessage] = useState("");
   const [broadcastSuccess, setBroadcastSuccess] = useState(false);
+
+  const [checkInInput, setCheckInInput] = useState("");
+  const [checkInBy, setCheckInBy] = useState("Gate Desk");
+  const [checkInNotice, setCheckInNotice] = useState<{ ok: boolean; message: string; ticket?: import("../types").Ticket } | null>(null);
 
   // Custom Task Assignment State
   const [customTask, setCustomTask] = useState("");
@@ -158,6 +170,8 @@ export default function OrganizerModule({
   const handleSendBroadcast = (e: React.FormEvent) => {
     e.preventDefault();
     if (!broadcastMessage) return;
+    const recipientId = broadcastTarget === "volunteers" ? "volunteer" : broadcastTarget === "participants" ? "participant" : broadcastTarget === "sponsors" ? "sponsor" : "all";
+    onBroadcastMessage(recipientId, broadcastMessage);
     setBroadcastSuccess(true);
     setBroadcastMessage("");
     setTimeout(() => {
@@ -176,6 +190,15 @@ export default function OrganizerModule({
     return sponsorAgreements
       .filter((sa) => sa.eventId === evtId && sa.status === "approved")
       .reduce((sum, sa) => sum + sa.price, 0);
+  };
+
+  const handleCheckInSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const result = onCheckInTicket(checkInInput, checkInBy);
+    setCheckInNotice(result);
+    if (result.ok) {
+      setCheckInInput("");
+    }
   };
 
   return (<>
@@ -207,6 +230,7 @@ export default function OrganizerModule({
       <div className="flex flex-wrap gap-2 border-b border-neutral-100 mb-8 pb-1">
         {[
           { id: "dashboard", label: "Overview & Analytics", count: null },
+          { id: "checkin", label: "Entry Check-in", count: tickets.filter((ticket) => ticket.eventId === selectedEvent?.id && ticket.checkedIn).length },
           { id: "create", label: "Create Event", count: null },
           { id: "budget", label: "Budget & Spending", count: null },
           { id: "staff", label: "Volunteer Applications", count: volunteerApps.filter((a) => a.status === "pending").length },
@@ -302,6 +326,7 @@ export default function OrganizerModule({
                   <div className="flex gap-3">
                     {[
                       { id: "all", label: "All attendees" },
+                      { id: "participants", label: "Participants" },
                       { id: "volunteers", label: "Volunteers" },
                       { id: "sponsors", label: "Sponsors" }
                     ].map((tg) => (
@@ -346,6 +371,22 @@ export default function OrganizerModule({
                   Sent successfully. The update is ready for review.
                 </div>
               )}
+
+              <div className="mt-4 pt-4 border-t border-neutral-100">
+                <h4 className="text-[10px] font-bold uppercase tracking-widest text-neutral-400 mb-2">Recent board messages</h4>
+                <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                  {messages.slice().reverse().slice(0, 6).map((message) => (
+                    <div key={message.id} className="rounded-lg border border-neutral-100 bg-neutral-50 p-2 text-[10px]">
+                      <div className="flex justify-between gap-2">
+                        <span className="font-bold text-neutral-700">{message.senderName}</span>
+                        <span className="text-neutral-400">{message.timestamp}</span>
+                      </div>
+                      <div className="text-neutral-400 uppercase tracking-widest">To: {message.recipientId}</div>
+                      <p className="mt-1 text-neutral-600 line-clamp-2">{message.message}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
 
             {/* Right Block: Certificates Creator */}
@@ -388,6 +429,98 @@ export default function OrganizerModule({
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ENTRY CHECK-IN TAB */}
+      {activeTab === "checkin" && selectedEvent && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="bg-white p-6 border border-neutral-100 rounded-xl shadow-xs lg:col-span-2 space-y-5">
+            <div>
+              <h3 className="text-xs font-bold text-neutral-800 uppercase tracking-widest">QR Entry Desk</h3>
+              <p className="text-xs text-neutral-500 mt-1">Scan or paste a participant QR payload, ticket code, or ticket ID to mark entry.</p>
+            </div>
+
+            <form onSubmit={handleCheckInSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-[10px] font-semibold text-neutral-500 uppercase mb-1">QR payload / ticket code</label>
+                  <input
+                    value={checkInInput}
+                    onChange={(e) => setCheckInInput(e.target.value)}
+                    placeholder="eme-ticket|tkt-1|evt-1|usr-6|TKT-INN-4890"
+                    className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-neutral-500 uppercase mb-1">Verified by</label>
+                  <input
+                    value={checkInBy}
+                    onChange={(e) => setCheckInBy(e.target.value)}
+                    className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-xs"
+                  />
+                </div>
+              </div>
+
+              <button type="submit" className="px-4 py-2 bg-neutral-900 text-white rounded-lg text-xs font-bold cursor-pointer">
+                Verify Entry
+              </button>
+            </form>
+
+            {checkInNotice && (
+              <div className={`rounded-xl border p-4 text-xs ${checkInNotice.ok ? "bg-emerald-50 border-emerald-100 text-emerald-800" : "bg-amber-50 border-amber-100 text-amber-900"}`}>
+                <div className="font-bold uppercase tracking-widest text-[10px] mb-1">{checkInNotice.ok ? "Entry Approved" : "Check-in Alert"}</div>
+                <p>{checkInNotice.message}</p>
+                {checkInNotice.ticket && (
+                  <div className="mt-3 grid grid-cols-2 gap-3 text-[10px]">
+                    <div className="rounded-lg bg-white/80 border border-neutral-100 p-2">
+                      <div className="uppercase tracking-widest text-neutral-400 font-bold">Guest</div>
+                      <div className="font-semibold text-neutral-800">{checkInNotice.ticket.participantName}</div>
+                    </div>
+                    <div className="rounded-lg bg-white/80 border border-neutral-100 p-2">
+                      <div className="uppercase tracking-widest text-neutral-400 font-bold">Ticket</div>
+                      <div className="font-semibold text-neutral-800">{checkInNotice.ticket.ticketCode}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white p-6 border border-neutral-100 rounded-xl shadow-xs space-y-4">
+            <div>
+              <h3 className="text-xs font-bold text-neutral-800 uppercase tracking-widest">Ticket Queue</h3>
+              <p className="text-[10px] text-neutral-400 mt-0.5">{selectedEvent.title}</p>
+            </div>
+
+            <div className="space-y-3 max-h-[26rem] overflow-y-auto pr-1">
+              {tickets.filter((ticket) => ticket.eventId === selectedEvent.id).length === 0 ? (
+                <p className="text-xs text-neutral-400 py-6 text-center">No tickets issued for this event yet.</p>
+              ) : (
+                tickets.filter((ticket) => ticket.eventId === selectedEvent.id).map((ticket) => (
+                  <button
+                    key={ticket.id}
+                    type="button"
+                    onClick={() => {
+                      setCheckInInput(ticket.qrPayload);
+                      setActiveTab("checkin");
+                    }}
+                    className="w-full text-left p-3 rounded-xl border border-neutral-100 bg-neutral-50/70 hover:bg-neutral-100 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-bold text-neutral-800">{ticket.participantName}</div>
+                        <div className="text-[10px] text-neutral-500 mt-0.5">{ticket.ticketCode}</div>
+                      </div>
+                      <span className={`px-2 py-0.5 text-[9px] font-bold uppercase rounded-full ${ticket.checkedIn ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+                        {ticket.checkedIn ? "Checked In" : "Pending"}
+                      </span>
+                    </div>
+                  </button>
+                ))
+              )}
             </div>
           </div>
         </div>

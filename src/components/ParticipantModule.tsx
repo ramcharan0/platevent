@@ -1,10 +1,12 @@
 import React, { useState } from "react";
-import { Ticket, Feedback, MockMessage } from "../types";
+import { Ticket, Feedback, MockMessage, UserProfile } from "../types";
 import { Award, Mail, QrCode, Shield, MapPin, Calendar, Check, Send, CheckCircle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { formatDateIN } from "../utils/format";
+import { QRCodeSVG } from "qrcode.react";
 
 interface ParticipantModuleProps {
+  currentUser: UserProfile;
   tickets: Ticket[];
   feedbacks: Feedback[];
   messages: MockMessage[];
@@ -14,6 +16,7 @@ interface ParticipantModuleProps {
 }
 
 export default function ParticipantModule({
+  currentUser,
   tickets,
   feedbacks,
   messages,
@@ -21,10 +24,11 @@ export default function ParticipantModule({
   onFeedbackSubmitted,
   onSendMessage,
 }: ParticipantModuleProps) {
-  const [activeTab, setActiveTab] = useState<"tickets" | "certificates" | "network">("tickets");
+  const [activeTab, setActiveTab] = useState<"tickets" | "certificates" | "network" | "board">("tickets");
 
   // Certificate render context
   const [focusedCertificateTicket, setFocusedCertificateTicket] = useState<Ticket | null>(null);
+  const [selectedQrTicket, setSelectedQrTicket] = useState<Ticket | null>(null);
 
   // Feedback parameters
   const [activeFeedbackTicket, setActiveFeedbackTicket] = useState<Ticket | null>(null);
@@ -35,6 +39,17 @@ export default function ParticipantModule({
   // Networking parameters
   const [selectedPeerId, setSelectedPeerId] = useState<string>("peer-2");
   const [chatInput, setChatInput] = useState("");
+  const [boardTarget, setBoardTarget] = useState<"organizer" | "all">("organizer");
+  const [boardMessage, setBoardMessage] = useState("");
+
+  const sharedBoardMessages = messages.filter((message) => {
+    const isMine = message.senderName === currentUser.name;
+    const isPublic = message.recipientId === "all";
+    const isParticipantBoard = message.recipientId === "participant";
+    const isForMe = message.recipientId === currentUser.id || message.recipientId === currentUser.role;
+    const isForOrganizerReply = currentUser.role === "participant" && message.recipientId === "organizer";
+    return isMine || isPublic || isParticipantBoard || isForMe || isForOrganizerReply;
+  });
 
   const networkingPeers = [
     { id: "peer-1", name: "Sana Khan", role: "Software Intern", email: "sana.khan@student.edu.in", bio: "Interested in React design systems, UX animation, and outdoor hiking." },
@@ -59,6 +74,13 @@ export default function ParticipantModule({
     setChatInput("");
   };
 
+  const handleBoardPost = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!boardMessage.trim()) return;
+    onSendMessage(boardTarget, boardMessage.trim());
+    setBoardMessage("");
+  };
+
   return (
     <div id="participant-root" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       
@@ -80,6 +102,7 @@ export default function ParticipantModule({
       <div className="flex gap-2 border-b border-neutral-100 mb-8 pb-1">
         {[
           { id: "tickets", label: "My Tickets", count: tickets.filter((t) => !t.feedbackSubmitted).length },
+          { id: "board", label: "Message Board", count: sharedBoardMessages.length },
           { id: "certificates", label: "Certificates", count: tickets.filter((t) => t.certificateIssued).length },
           { id: "network", label: "Networking", count: null }
         ].map((tab) => (
@@ -104,6 +127,58 @@ export default function ParticipantModule({
       </div>
 
       {/* 2. TAB COMPONENT VIEWS */}
+
+      {/* MESSAGE BOARD TAB */}
+      {activeTab === "board" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="bg-white border border-neutral-100 rounded-xl p-6 shadow-xs lg:col-span-2 space-y-4">
+            <div>
+              <h3 className="text-xs font-bold text-neutral-800 uppercase tracking-widest">Shared Message Board</h3>
+              <p className="text-[10px] text-neutral-400 mt-0.5">Read organizer announcements and send a note back to the team.</p>
+            </div>
+
+            <div className="space-y-3 max-h-[28rem] overflow-y-auto pr-1">
+              {sharedBoardMessages.length === 0 ? (
+                <p className="text-xs text-neutral-400 py-10 text-center">No messages on the board yet.</p>
+              ) : (
+                sharedBoardMessages.map((message) => (
+                  <div key={message.id} className={`p-3 rounded-xl border text-xs ${message.senderName === currentUser.name ? "bg-emerald-50 border-emerald-100" : "bg-neutral-50 border-neutral-100"}`}>
+                    <div className="flex justify-between gap-3">
+                      <div>
+                        <div className="font-bold text-neutral-800">{message.senderName}</div>
+                        <div className="text-[10px] uppercase tracking-widest text-neutral-400">To: {message.recipientId}</div>
+                      </div>
+                      <span className="text-[10px] text-neutral-400">{message.timestamp}</span>
+                    </div>
+                    <p className="mt-2 text-neutral-700 leading-relaxed">{message.message}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white border border-neutral-100 rounded-xl p-6 shadow-xs space-y-4">
+            <div>
+              <h3 className="text-xs font-bold text-neutral-800 uppercase tracking-widest">Post Message</h3>
+              <p className="text-[10px] text-neutral-400 mt-0.5">Send a note to the organizer or the public board.</p>
+            </div>
+            <form onSubmit={handleBoardPost} className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-semibold text-neutral-500 uppercase mb-1">Audience</label>
+                <select value={boardTarget} onChange={(e) => setBoardTarget(e.target.value as "organizer" | "all")} className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-xs bg-white">
+                  <option value="organizer">Organizer</option>
+                  <option value="all">Public board</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-neutral-500 uppercase mb-1">Message</label>
+                <textarea value={boardMessage} onChange={(e) => setBoardMessage(e.target.value)} rows={4} className="w-full px-3 py-2 border border-neutral-200 rounded-lg text-xs" placeholder="Ask a question or share an update..." />
+              </div>
+              <button type="submit" className="w-full px-4 py-2 bg-neutral-900 text-white rounded-lg text-xs font-bold cursor-pointer">Send to board</button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* TICKETS TAB */}
       {activeTab === "tickets" && (
@@ -138,16 +213,30 @@ export default function ParticipantModule({
                     <div>
                       <span className="text-[10px] text-neutral-400 block">Registered holder:</span>
                       <strong className="text-xs text-neutral-800">{tkt.participantName}</strong>
-                    </div>
-
-                    {/* QR Code Icon trigger */}
-                    <div className="bg-neutral-50 p-2.5 rounded-lg border border-neutral-100 flex items-center gap-2">
-                      <QrCode className="w-8 h-8 text-neutral-800" />
-                      <div className="leading-none">
-                        <span className="text-[9px] text-neutral-400 block">Entry QR</span>
-                        <span className="text-[8px] font-bold font-mono text-emerald-700 block">Ready for check-in</span>
+                      <div className="mt-1 flex items-center gap-2 text-[10px]">
+                        <span className={`px-2 py-0.5 rounded-full font-bold uppercase ${tkt.checkedIn ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+                          {tkt.checkedIn ? "Checked In" : "Awaiting Entry"}
+                        </span>
+                        <button
+                          onClick={() => setSelectedQrTicket(tkt)}
+                          className="text-emerald-700 font-bold hover:text-emerald-900"
+                        >
+                          Open QR
+                        </button>
                       </div>
                     </div>
+
+                    {/* QR Code preview */}
+                    <button
+                      onClick={() => setSelectedQrTicket(tkt)}
+                      className="bg-neutral-50 p-2.5 rounded-lg border border-neutral-100 flex items-center gap-2 cursor-pointer hover:bg-neutral-100 transition-colors"
+                    >
+                      <QRCodeSVG value={tkt.qrPayload} size={56} level="M" includeMargin fgColor="#115e59" bgColor="#ffffff" />
+                      <div className="leading-none text-left">
+                        <span className="text-[9px] text-neutral-400 block">Entry QR</span>
+                        <span className="text-[8px] font-bold font-mono text-emerald-700 block">Tap to enlarge</span>
+                      </div>
+                    </button>
                   </div>
                 </div>
 
@@ -247,6 +336,56 @@ export default function ParticipantModule({
                       Save Review
                     </button>
                   </form>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+
+          {/* QR Ticket Viewer */}
+          <AnimatePresence>
+            {selectedQrTicket && (
+              <div className="fixed inset-0 bg-black/55 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+                <motion.div
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.95, opacity: 0 }}
+                  className="bg-white rounded-2xl w-full max-w-md p-6 border border-neutral-100 shadow-2xl space-y-5"
+                >
+                  <div className="flex justify-between items-start gap-4">
+                    <div>
+                      <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Entry QR Pass</h3>
+                      <h4 className="text-sm font-extrabold text-neutral-900 mt-1">{selectedQrTicket.eventTitle}</h4>
+                    </div>
+                    <button onClick={() => setSelectedQrTicket(null)} className="text-neutral-400 hover:text-neutral-800 text-xs font-semibold cursor-pointer">×</button>
+                  </div>
+
+                  <div className="bg-neutral-50 border border-neutral-100 rounded-2xl p-6 flex flex-col items-center gap-4">
+                    <div className="bg-white p-3 rounded-xl shadow-sm border border-neutral-100">
+                      <QRCodeSVG value={selectedQrTicket.qrPayload} size={200} level="M" includeMargin fgColor="#115e59" bgColor="#ffffff" />
+                    </div>
+                    <div className="text-center space-y-1">
+                      <div className="text-sm font-bold text-neutral-900">{selectedQrTicket.participantName}</div>
+                      <div className="text-xs text-neutral-500">{selectedQrTicket.ticketCode}</div>
+                      <div className={`inline-flex px-2 py-1 rounded-full text-[10px] font-bold uppercase ${selectedQrTicket.checkedIn ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+                        {selectedQrTicket.checkedIn ? "Checked In" : "Ready to Scan"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="rounded-xl border border-neutral-100 p-3 bg-neutral-50">
+                      <div className="text-[10px] uppercase tracking-widest text-neutral-400 font-bold">Issued</div>
+                      <div className="mt-1 font-semibold text-neutral-800">{formatDateIN(selectedQrTicket.qrIssuedAt.slice(0, 10))}</div>
+                    </div>
+                    <div className="rounded-xl border border-neutral-100 p-3 bg-neutral-50">
+                      <div className="text-[10px] uppercase tracking-widest text-neutral-400 font-bold">Entry Gate</div>
+                      <div className="mt-1 font-semibold text-neutral-800">{selectedQrTicket.checkedInBy || "Not checked in"}</div>
+                    </div>
+                  </div>
+
+                  <button onClick={() => setSelectedQrTicket(null)} className="w-full rounded-xl bg-neutral-900 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-neutral-800">
+                    Close
+                  </button>
                 </motion.div>
               </div>
             )}
